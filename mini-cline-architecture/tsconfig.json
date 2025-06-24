@@ -12,7 +12,16 @@
     "rootDir": "./src",
     "baseUrl": "./",
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": ["src/*"],
+			"@api/*": ["src/api/*"],
+			"@core/*": ["src/core/*"],
+			"@generated/*": ["src/generated/*"],
+			"@hosts/*": ["src/hosts/*"],
+			"@integrations/*": ["src/integrations/*"],
+			"@packages/*": ["src/packages/*"],
+			"@services/*": ["src/services/*"],
+			"@shared/*": ["src/shared/*"],
+			"@utils/*": ["src/utils/*"]
     },
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
