@@ -102,6 +102,7 @@ export const cwd =
 	vscode.workspace.workspaceFolders?.map((folder) => folder.uri.fsPath).at(0) ?? path.join(os.homedir(), "Desktop") // may or may not exist but fs checking existence would immediately ask for permission which would be bad UX, need to come up with a better solution
 
 export type ToolResponse = string | Array<Anthropic.TextBlockParam | Anthropic.ImageBlockParam>
+
 type UserContent = Array<Anthropic.ContentBlockParam>
 
 export class Task {
@@ -1165,8 +1166,10 @@ export class Task {
 			const didEndLoop = await this.recursivelyMakeClineRequests(nextUserContent, includeFileDetails)
 			includeFileDetails = false // we only need file details the first time
 
-			//  The way this agentic loop works is that cline will be given a task that he then calls tools to complete. unless there's an attempt_completion call, we keep responding back to him with his tool's responses until he either attempt_completion or does not use anymore tools. If he does not use anymore tools, we ask him to consider if he's completed the task and then call attempt_completion, otherwise proceed with completing the task.
-			// There is a MAX_REQUESTS_PER_TASK limit to prevent infinite requests, but Cline is prompted to finish the task as efficiently as he can.
+			// 这个代理循环的工作方式是，cline会被分配一个任务，然后他会调用工具来完成任务。
+			// 除非有一个attempt_completion调用，我们会继续将他的工具响应返回给他，直到他要么调用attempt_completion，
+			// 要么不再使用任何工具。如果他不再使用任何工具，我们会问他是否完成了任务，然后调用attempt_completion，否则继续完成任务。
+			// 有一个MAX_REQUESTS_PER_TASK的限制，以防止无限的请求，但是cline会被提示尽可能高效地完成任务。
 
 			//const totalCost = this.calculateApiCost(totalInputTokens, totalOutputTokens)
 			if (didEndLoop) {

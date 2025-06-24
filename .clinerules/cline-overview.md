@@ -1,48 +1,48 @@
-# Cline Extension Architecture & Development Guide
+# Cline 扩展架构与开发指南
 
-## Project Overview
+## 项目概述
 
-Cline is a VSCode extension that provides AI assistance through a combination of a core extension backend and a React-based webview frontend. The extension is built with TypeScript and follows a modular architecture pattern.
+Cline 是一个 VSCode 扩展，通过核心后端和基于 React 的 webview 前端为用户提供 AI 助手功能。该扩展使用 TypeScript 构建，遵循模块化架构模式。
 
-## Architecture Overview
+## 架构总览
 
 ```mermaid
 graph TB
-    subgraph VSCodeExtensionHost[VSCode Extension Host]
-        subgraph CoreExtension[Core Extension]
-            ExtensionEntry[Extension Entry<br/>src/extension.ts]
+    subgraph VSCodeExtensionHost[VSCode 扩展主机]
+        subgraph CoreExtension[核心扩展]
+            ExtensionEntry[扩展入口<br/>src/extension.ts]
             WebviewProvider[WebviewProvider<br/>src/core/webview/index.ts]
-            Controller[Controller<br/>src/core/controller/index.ts]
-            Task[Task<br/>src/core/task/index.ts]
-            GlobalState[VSCode Global State]
-            SecretsStorage[VSCode Secrets Storage]
+            Controller[控制器<br/>src/core/controller/index.ts]
+            Task[任务<br/>src/core/task/index.ts]
+            GlobalState[VSCode 全局状态]
+            SecretsStorage[VSCode 密钥存储]
             McpHub[McpHub<br/>src/services/mcp/McpHub.ts]
         end
 
         subgraph WebviewUI[Webview UI]
-            WebviewApp[React App<br/>webview-ui/src/App.tsx]
-            ExtStateContext[ExtensionStateContext<br/>webview-ui/src/context/ExtensionStateContext.tsx]
-            ReactComponents[React Components]
+            WebviewApp[React 应用<br/>webview-ui/src/App.tsx]
+            ExtStateContext[扩展状态上下文<br/>webview-ui/src/context/ExtensionStateContext.tsx]
+            ReactComponents[React 组件]
         end
 
         subgraph Storage
-            TaskStorage[Task Storage<br/>Per-Task Files & History]
-            CheckpointSystem[Git-based Checkpoints]
+            TaskStorage[任务存储<br/>每个任务的文件与历史]
+            CheckpointSystem[基于 Git 的检查点]
         end
 
-        subgraph apiProviders[API Providers]
+        subgraph apiProviders[API 提供方]
             AnthropicAPI[Anthropic]
             OpenRouterAPI[OpenRouter]
             BedrockAPI[AWS Bedrock]
-            OtherAPIs[Other Providers]
+            OtherAPIs[其他提供方]
         end
 
-        subgraph MCPServers[MCP Servers]
-            ExternalMcpServers[External MCP Servers]
+        subgraph MCPServers[MCP 服务器]
+            ExternalMcpServers[外部 MCP 服务器]
         end
     end
 
-    %% Core Extension Data Flow
+    %% 核心扩展数据流
     ExtensionEntry --> WebviewProvider
     WebviewProvider --> Controller
     Controller --> Task
@@ -51,15 +51,15 @@ graph TB
     Task --> SecretsStorage
     Task --> TaskStorage
     Task --> CheckpointSystem
-    Task --> |API Requests| apiProviders
-    McpHub --> |Connects to| ExternalMcpServers
-    Task --> |Uses| McpHub
+    Task --> |API 请求| apiProviders
+    McpHub --> |连接到| ExternalMcpServers
+    Task --> |使用| McpHub
 
-    %% Webview Data Flow
+    %% Webview 数据流
     WebviewApp --> ExtStateContext
     ExtStateContext --> ReactComponents
 
-    %% Bidirectional Communication
+    %% 双向通信
     WebviewProvider <-->|postMessage| ExtStateContext
 
     style GlobalState fill:#f9f,stroke:#333,stroke-width:2px
@@ -70,157 +70,157 @@ graph TB
     style apiProviders fill:#fdb,stroke:#333,stroke-width:2px
 ```
 
-## Definitions 
+## 术语定义
 
-- **Core Extension**: Anything inside the src folder, organized into modular components
-- **Core Extension State**: Managed by the Controller class in src/core/controller/index.ts, which serves as the single source of truth for the extension's state. It manages multiple types of persistent storage (global state, workspace state, and secrets), handles state distribution to both the core extension and webview components, and coordinates state across multiple extension instances. This includes managing API configurations, task history, settings, and MCP configurations.
-- **Webview**: Anything inside the webview-ui. All the react or view's seen by the user and user interaction components
-- **Webview State**: Managed by ExtensionStateContext in webview-ui/src/context/ExtensionStateContext.tsx, which provides React components with access to the extension's state through a context provider pattern. It maintains local state for UI components, handles real-time updates through message events, manages partial message updates, and provides methods for state modifications. The context includes extension version, messages, task history, theme, API configurations, MCP servers, marketplace catalog, and workspace file paths. It synchronizes with the core extension through VSCode's message passing system and provides type-safe access to state through a custom hook (useExtensionState).
+- **核心扩展**：src 文件夹内的所有内容，按模块组织
+- **核心扩展状态**：由 src/core/controller/index.ts 中的 Controller 类管理，作为扩展状态的唯一数据源。它管理多种持久化存储（全局状态、工作区状态和密钥），负责状态分发到核心扩展和 webview 组件，并协调多个扩展实例的状态。这包括 API 配置、任务历史、设置和 MCP 配置。
+- **Webview**：webview-ui 内的所有内容。所有用户可见的 React 视图和交互组件
+- **Webview 状态**：由 webview-ui/src/context/ExtensionStateContext.tsx 中的 ExtensionStateContext 管理，通过 context provider 模式为 React 组件提供扩展状态访问。它维护 UI 组件的本地状态，处理消息事件的实时更新，管理流式内容的部分更新，并通过自定义 hook（useExtensionState）提供类型安全的状态访问。context 包含扩展版本、消息、任务历史、主题、API 配置、MCP 服务器、市场目录和工作区文件路径。它通过 VSCode 的消息传递系统与核心扩展同步。
 
-### Core Extension Architecture
+### 核心扩展架构
 
-The core extension follows a clear hierarchical structure:
+核心扩展遵循清晰的层级结构：
 
-1. **WebviewProvider** (src/core/webview/index.ts): Manages the webview lifecycle and communication
-2. **Controller** (src/core/controller/index.ts): Handles webview messages and task management
-3. **Task** (src/core/task/index.ts): Executes API requests and tool operations
+1. **WebviewProvider**（src/core/webview/index.ts）：管理 webview 生命周期和通信
+2. **Controller**（src/core/controller/index.ts）：处理 webview 消息和任务管理
+3. **Task**（src/core/task/index.ts）：执行 API 请求和工具操作
 
-This architecture provides clear separation of concerns:
-- WebviewProvider focuses on VSCode webview integration
-- Controller manages state and coordinates tasks
-- Task handles the execution of AI requests and tool operations
+这种架构实现了关注点分离：
+- WebviewProvider 专注于 VSCode webview 集成
+- Controller 管理状态并协调任务
+- Task 负责 AI 请求和工具操作的执行
 
-### WebviewProvider Implementation
+### WebviewProvider 实现
 
-The WebviewProvider class in `src/core/webview/index.ts` is responsible for:
+WebviewProvider 类（src/core/webview/index.ts）负责：
 
-- Managing multiple active instances through a static set (`activeInstances`)
-- Handling webview lifecycle events (creation, visibility changes, disposal)
-- Implementing HTML content generation with proper CSP headers
-- Supporting Hot Module Replacement (HMR) for development
-- Setting up message listeners between the webview and extension
+- 通过静态集合（activeInstances）管理多个活动实例
+- 处理 webview 生命周期事件（创建、可见性变化、销毁）
+- 实现带有 CSP 头的 HTML 内容生成
+- 支持开发时的热模块替换（HMR）
+- 设置 webview 与扩展之间的消息监听器
 
-The WebviewProvider maintains a reference to the Controller and delegates message handling to it. It also handles the creation of both sidebar and tab panel webviews, allowing Cline to be used in different contexts within VSCode.
+WebviewProvider 持有 Controller 的引用，并将消息处理委托给它。它还负责创建侧边栏和标签面板 webview，使 Cline 能在 VSCode 的不同上下文中使用。
 
-### Core Extension State
+### 核心扩展状态
 
-The `Controller` class manages multiple types of persistent storage:
+Controller 类管理多种持久化存储：
 
-- **Global State:** Stored across all VSCode instances. Used for settings and data that should persist globally.
-- **Workspace State:** Specific to the current workspace. Used for task-specific data and settings.
-- **Secrets:** Secure storage for sensitive information like API keys.
+- **全局状态**：跨所有 VSCode 实例存储。用于需要全局持久化的设置和数据。
+- **工作区状态**：当前工作区专属。用于任务相关的数据和设置。
+- **密钥**：用于敏感信息（如 API 密钥）的安全存储。
 
-The `Controller` handles the distribution of state to both the core extension and webview components. It also coordinates state across multiple extension instances, ensuring consistency.
+Controller 负责将状态分发到核心扩展和 webview 组件，并协调多个扩展实例间的状态一致性。
 
-State synchronization between instances is handled through:
-- File-based storage for task history and conversation data
-- VSCode's global state API for settings and configuration
-- Secrets storage for sensitive information
-- Event listeners for file changes and configuration updates
+状态同步通过以下方式实现：
+- 基于文件的任务历史和会话数据存储
+- VSCode 全局状态 API 用于设置和配置
+- 密钥存储用于敏感信息
+- 文件变更和配置更新的事件监听
 
-The Controller implements methods for:
-- Saving and loading task state
-- Managing API configurations
-- Handling user authentication
-- Coordinating MCP server connections
-- Managing task history and checkpoints
+Controller 实现了以下方法：
+- 保存和加载任务状态
+- 管理 API 配置
+- 处理用户认证
+- 协调 MCP 服务器连接
+- 管理任务历史和检查点
 
-### Webview State
+### Webview 状态
 
-The `ExtensionStateContext` in `webview-ui/src/context/ExtensionStateContext.tsx` provides React components with access to the extension's state. It uses a context provider pattern and maintains local state for UI components. The context includes:
+webview-ui/src/context/ExtensionStateContext.tsx 中的 ExtensionStateContext 通过 context provider 模式为 React 组件提供扩展状态访问。context 包含：
 
-- Extension version
-- Messages
-- Task history
-- Theme
-- API configurations
-- MCP servers
-- Marketplace catalog
-- Workspace file paths
+- 扩展版本
+- 消息
+- 任务历史
+- 主题
+- API 配置
+- MCP 服务器
+- 市场目录
+- 工作区文件路径
 
-It synchronizes with the core extension through VSCode's message passing system and provides type-safe access to the state via a custom hook (`useExtensionState`).
+它通过 VSCode 的消息传递系统与核心扩展同步，并通过自定义 hook（useExtensionState）提供类型安全的状态访问。
 
-The ExtensionStateContext handles:
-- Real-time updates through message events
-- Partial message updates for streaming content
-- State modifications through setter methods
-- Type-safe access to state through a custom hook
+ExtensionStateContext 负责：
+- 通过消息事件实现实时更新
+- 支持流式内容的部分消息更新
+- 通过 setter 方法修改状态
+- 通过自定义 hook 类型安全地访问状态
 
-## API Provider System
+## API 提供方系统
 
-Cline supports multiple AI providers through a modular API provider system. Each provider is implemented as a separate module in the `src/api/providers/` directory and follows a common interface.
+Cline 通过模块化 API 提供方系统支持多家 AI 服务商。每个提供方在 src/api/providers/ 目录下实现，遵循统一接口。
 
-### API Provider Architecture
+### API 提供方架构
 
-The API system consists of:
+API 系统包括：
 
-1. **API Handlers**: Provider-specific implementations in `src/api/providers/`
-2. **API Transformers**: Stream transformation utilities in `src/api/transform/`
-3. **API Configuration**: User settings for API keys and endpoints
-4. **API Factory**: Builder function to create the appropriate handler
+1. **API 处理器**：src/api/providers/ 下的各提供方实现
+2. **API 转换器**：src/api/transform/ 下的流转换工具
+3. **API 配置**：用户的 API 密钥和端点设置
+4. **API 工厂**：用于创建对应处理器的构建函数
 
-Key providers include:
-- **Anthropic**: Direct integration with Claude models
-- **OpenRouter**: Meta-provider supporting multiple model providers
-- **AWS Bedrock**: Integration with Amazon's AI services
-- **Gemini**: Google's AI models
-- **Cerebras**: High-performance inference with Llama, Qwen, and DeepSeek models
-- **Ollama**: Local model hosting
-- **LM Studio**: Local model hosting
-- **VSCode LM**: VSCode's built-in language models
+主要支持的提供方有：
+- **Anthropic**：直接集成 Claude 模型
+- **OpenRouter**：支持多模型的元提供方
+- **AWS Bedrock**：集成亚马逊 AI 服务
+- **Gemini**：谷歌 AI 模型
+- **Cerebras**：高性能 Llama、Qwen、DeepSeek 推理
+- **Ollama**：本地模型托管
+- **LM Studio**：本地模型托管
+- **VSCode LM**：VSCode 内置语言模型
 
-### API Configuration Management
+### API 配置管理
 
-API configurations are stored securely:
-- API keys are stored in VSCode's secrets storage
-- Model selections and non-sensitive settings are stored in global state
-- The Controller manages switching between providers and updating configurations
+API 配置安全存储：
+- API 密钥存储于 VSCode 密钥存储
+- 模型选择和非敏感设置存储于全局状态
+- Controller 管理提供方切换和配置更新
 
-The system supports:
-- Secure storage of API keys
-- Model selection and configuration
-- Automatic retry and error handling
-- Token usage tracking and cost calculation
-- Context window management
+系统支持：
+- API 密钥安全存储
+- 模型选择与配置
+- 自动重试与错误处理
+- Token 使用与费用统计
+- 上下文窗口管理
 
-### Plan/Act Mode API Configuration
+### 计划/执行模式下的 API 配置
 
-Cline supports separate model configurations for Plan and Act modes:
-- Different models can be used for planning vs. execution
-- The system preserves model selections when switching modes
-- The Controller handles the transition between modes and updates the API configuration accordingly
+Cline 支持计划（Plan）和执行（Act）模式下分别配置模型：
+- 可为计划与执行分别选择不同模型
+- 切换模式时保留各自模型选择
+- Controller 负责模式切换与配置更新
 
-## Task Execution System
+## 任务执行系统
 
-The Task class is responsible for executing AI requests and tool operations. Each task runs in its own instance of the Task class, ensuring isolation and proper state management.
+Task 类负责执行 AI 请求和工具操作。每个任务独立运行，确保状态隔离和管理。
 
-### Task Execution Loop
+### 任务执行循环
 
-The core task execution loop follows this pattern:
+核心任务执行循环如下：
 
 ```typescript
 class Task {
   async initiateTaskLoop(userContent: UserContent, isNewTask: boolean) {
     while (!this.abort) {
-      // 1. Make API request and stream response
+      // 1. 发起 API 请求并流式响应
       const stream = this.attemptApiRequest()
       
-      // 2. Parse and present content blocks
+      // 2. 解析并展示内容块
       for await (const chunk of stream) {
         switch (chunk.type) {
           case "text":
-            // Parse into content blocks
+            // 解析为内容块
             this.assistantMessageContent = parseAssistantMessageV2(chunk.text)
-            // Present blocks to user
+            // 展示内容块
             await this.presentAssistantMessage()
             break
         }
       }
       
-      // 3. Wait for tool execution to complete
+      // 3. 等待工具执行完成
       await pWaitFor(() => this.userMessageContentReady)
       
-      // 4. Continue loop with tool result
+      // 4. 用工具结果继续循环
       const recDidEndLoop = await this.recursivelyMakeClineRequests(
         this.userMessageContent
       )
@@ -229,34 +229,34 @@ class Task {
 }
 ```
 
-### Message Streaming System
+### 消息流系统
 
-The streaming system handles real-time updates and partial content:
+流系统处理实时更新和部分内容：
 
 ```typescript
 class Task {
   async presentAssistantMessage() {
-    // Handle streaming locks to prevent race conditions
+    // 处理流锁，防止竞态
     if (this.presentAssistantMessageLocked) {
       this.presentAssistantMessageHasPendingUpdates = true
       return
     }
     this.presentAssistantMessageLocked = true
 
-    // Present current content block
+    // 展示当前内容块
     const block = this.assistantMessageContent[this.currentStreamingContentIndex]
     
-    // Handle different types of content
+    // 处理不同类型内容
     switch (block.type) {
       case "text":
         await this.say("text", content, undefined, block.partial)
         break
       case "tool_use":
-        // Handle tool execution
+        // 处理工具执行
         break
     }
 
-    // Move to next block if complete
+    // 完成后进入下一个块
     if (!block.partial) {
       this.currentStreamingContentIndex++
     }
@@ -264,19 +264,19 @@ class Task {
 }
 ```
 
-### Tool Execution Flow
+### 工具执行流程
 
-Tools follow a strict execution pattern:
+工具遵循严格的执行模式：
 
 ```typescript
 class Task {
   async executeToolWithApproval(block: ToolBlock) {
-    // 1. Check auto-approval settings
+    // 1. 检查自动批准设置
     if (this.shouldAutoApproveTool(block.name)) {
       await this.say("tool", message)
       this.consecutiveAutoApprovedRequestsCount++
     } else {
-      // 2. Request user approval
+      // 2. 请求用户批准
       const didApprove = await askApproval("tool", message)
       if (!didApprove) {
         this.didRejectTool = true
@@ -284,61 +284,61 @@ class Task {
       }
     }
 
-    // 3. Execute tool
+    // 3. 执行工具
     const result = await this.executeTool(block)
 
-    // 4. Save checkpoint
+    // 4. 保存检查点
     await this.saveCheckpoint()
 
-    // 5. Return result to API
+    // 5. 返回结果给 API
     return result
   }
 }
 ```
 
-### Error Handling & Recovery
+### 错误处理与恢复
 
-The system includes robust error handling:
+系统包含健壮的错误处理：
 
 ```typescript
 class Task {
   async handleError(action: string, error: Error) {
-    // 1. Check if task was abandoned
+    // 1. 检查任务是否已放弃
     if (this.abandoned) return
     
-    // 2. Format error message
-    const errorString = `Error ${action}: ${error.message}`
+    // 2. 格式化错误信息
+    const errorString = `错误 ${action}: ${error.message}`
     
-    // 3. Present error to user
+    // 3. 展示错误给用户
     await this.say("error", errorString)
     
-    // 4. Add error to tool results
+    // 4. 添加到工具结果
     pushToolResult(formatResponse.toolError(errorString))
     
-    // 5. Cleanup resources
+    // 5. 清理资源
     await this.diffViewProvider.revertChanges()
     await this.browserSession.closeBrowser()
   }
 }
 ```
 
-### API Request & Token Management
+### API 请求与 Token 管理
 
-The Task class handles API requests with built-in retry, streaming, and token management:
+Task 类内置重试、流式和 token 管理：
 
 ```typescript
 class Task {
   async *attemptApiRequest(previousApiReqIndex: number): ApiStream {
-    // 1. Wait for MCP servers to connect
+    // 1. 等待 MCP 服务器连接
     await pWaitFor(() => this.controllerRef.deref()?.mcpHub?.isConnecting !== true)
 
-    // 2. Manage context window
+    // 2. 管理上下文窗口
     const previousRequest = this.clineMessages[previousApiReqIndex]
     if (previousRequest?.text) {
       const { tokensIn, tokensOut } = JSON.parse(previousRequest.text || "{}")
       const totalTokens = (tokensIn || 0) + (tokensOut || 0)
       
-      // Truncate conversation if approaching context limit
+      // 超限时截断会话
       if (totalTokens >= maxAllowedSize) {
         this.conversationHistoryDeletedRange = this.contextManager.getNextTruncationRange(
           this.apiConversationHistory,
@@ -348,17 +348,17 @@ class Task {
       }
     }
 
-    // 3. Handle streaming with automatic retry
+    // 3. 自动重试流
     try {
       this.isWaitingForFirstChunk = true
       const firstChunk = await iterator.next()
       yield firstChunk.value
       this.isWaitingForFirstChunk = false
       
-      // Stream remaining chunks
+      // 流剩余内容
       yield* iterator
     } catch (error) {
-      // 4. Error handling with retry
+      // 4. OpenRouter 自动重试
       if (isOpenRouter && !this.didAutomaticallyRetryFailedApiRequest) {
         await setTimeoutPromise(1000)
         this.didAutomaticallyRetryFailedApiRequest = true
@@ -366,7 +366,7 @@ class Task {
         return
       }
       
-      // 5. Ask user to retry if automatic retry failed
+      // 5. 自动重试失败后询问用户
       const { response } = await this.ask(
         "api_req_failed",
         this.formatErrorWithStatusCode(error)
@@ -381,199 +381,195 @@ class Task {
 }
 ```
 
-Key features:
+主要特性：
 
-1. **Context Window Management**
-   - Tracks token usage across requests
-   - Automatically truncates conversation when needed
-   - Preserves important context while freeing space
-   - Handles different model context sizes
+1. **上下文窗口管理**
+   - 跟踪每次请求的 token 使用
+   - 超限时自动截断会话
+   - 保留重要上下文
+   - 适配不同模型的上下文大小
 
-2. **Streaming Architecture**
-   - Real-time chunk processing
-   - Partial content handling
-   - Race condition prevention
-   - Error recovery during streaming
+2. **流式架构**
+   - 实时分块处理
+   - 支持部分内容
+   - 防止竞态
+   - 流式错误恢复
 
-3. **Error Handling**
-   - Automatic retry for transient failures
-   - User-prompted retry for persistent issues
-   - Detailed error reporting
-   - State cleanup on failure
+3. **错误处理**
+   - 短暂故障自动重试
+   - 持续故障用户确认重试
+   - 详细错误报告
+   - 失败时状态清理
 
-4. **Token Tracking**
-   - Per-request token counting
-   - Cumulative usage tracking
-   - Cost calculation
-   - Cache hit monitoring
+4. **Token 统计**
+   - 单次请求 token 统计
+   - 累计使用统计
+   - 费用计算
+   - 缓存命中监控
 
-### Context Management System
+### 上下文管理系统
 
-The Context Management System handles conversation history truncation to prevent context window overflow errors. Implemented in the `ContextManager` class, it ensures long-running conversations remain within model context limits while preserving critical context.
+上下文管理系统负责会话历史截断，防止上下文窗口溢出。由 ContextManager 类实现，保证长会话在模型上下文限制内，同时保留关键信息。
 
-Key features:
+主要特性：
 
-1. **Model-Aware Sizing**: Dynamically adjusts based on different model context windows (64K for DeepSeek, 128K for most models, 200K for Claude).
+1. **模型感知大小**：根据不同模型动态调整上下文窗口（DeepSeek 64K，大多数模型 128K，Claude 200K）。
+2. **主动截断**：监控 token 使用，接近上限时预截断，按模型保留 27K-40K token 缓冲。
+3. **智能保留**：始终保留原始任务消息，截断时保持用户-助手对话结构。
+4. **自适应策略**：根据压力不同采用不同截断策略——中等压力去掉一半，严重压力去掉四分之三。
+5. **错误恢复**：针对不同提供方的上下文溢出错误自动重试并更激进截断。
 
-2. **Proactive Truncation**: Monitors token usage and preemptively truncates conversations when approaching limits, maintaining buffers of 27K-40K tokens depending on the model.
+### 任务状态与恢复
 
-3. **Intelligent Preservation**: Always preserves the original task message and maintains the user-assistant conversation structure when truncating.
-
-4. **Adaptive Strategies**: Uses different truncation strategies based on context pressure - removing half of the conversation for moderate pressure or three-quarters for severe pressure.
-
-5. **Error Recovery**: Includes specialized detection for context window errors from different providers with automatic retry and more aggressive truncation when needed.
-
-### Task State & Resumption
-
-The Task class provides robust task state management and resumption capabilities:
+Task 类提供健壮的任务状态管理与恢复能力：
 
 ```typescript
 class Task {
   async resumeTaskFromHistory() {
-    // 1. Load saved state
+    // 1. 加载保存状态
     this.clineMessages = await getSavedClineMessages(this.getContext(), this.taskId)
     this.apiConversationHistory = await getSavedApiConversationHistory(this.getContext(), this.taskId)
 
-    // 2. Handle interrupted tool executions
+    // 2. 处理中断的工具执行
     const lastMessage = this.apiConversationHistory[this.apiConversationHistory.length - 1]
     if (lastMessage.role === "assistant") {
       const toolUseBlocks = content.filter(block => block.type === "tool_use")
       if (toolUseBlocks.length > 0) {
-        // Add interrupted tool responses
+        // 添加中断的工具响应
         const toolResponses = toolUseBlocks.map(block => ({
           type: "tool_result",
           tool_use_id: block.id,
-          content: "Task was interrupted before this tool call could be completed."
+          content: "任务在此工具调用完成前被中断。"
         }))
         modifiedOldUserContent = [...toolResponses]
       }
     }
 
-    // 3. Notify about interruption
+    // 3. 通知中断
     const agoText = this.getTimeAgoText(lastMessage?.ts)
     newUserContent.push({
       type: "text",
-      text: `[TASK RESUMPTION] This task was interrupted ${agoText}. It may or may not be complete, so please reassess the task context.`
+      text: `[任务恢复] 此任务在 ${agoText} 前被中断。可能未完成，请重新评估任务上下文。`
     })
 
-    // 4. Resume task execution
+    // 4. 恢复任务执行
     await this.initiateTaskLoop(newUserContent, false)
   }
 
   private async saveTaskState() {
-    // Save conversation history
+    // 保存会话历史
     await saveApiConversationHistory(this.getContext(), this.taskId, this.apiConversationHistory)
     await saveClineMessages(this.getContext(), this.taskId, this.clineMessages)
     
-    // Create checkpoint
+    // 创建检查点
     const commitHash = await this.checkpointTracker?.commit()
     
-    // Update task history
+    // 更新任务历史
     await this.controllerRef.deref()?.updateTaskHistory({
       id: this.taskId,
       ts: lastMessage.ts,
       task: taskMessage.text,
-      // ... other metadata
+      // ... 其他元数据
     })
   }
 }
 ```
 
-Key aspects of task state management:
+任务状态管理要点：
 
-1. **Task Persistence**
-   - Each task has a unique ID and dedicated storage directory
-   - Conversation history is saved after each message
-   - File changes are tracked through Git-based checkpoints
-   - Terminal output and browser state are preserved
+1. **任务持久化**
+   - 每个任务有唯一 ID 和专属存储目录
+   - 每条消息后保存会话历史
+   - 文件变更通过 Git 检查点跟踪
+   - 终端输出和浏览器状态也被保存
 
-2. **State Recovery**
-   - Tasks can be resumed from any point
-   - Interrupted tool executions are handled gracefully
-   - File changes can be restored from checkpoints
-   - Context is preserved across VSCode sessions
+2. **状态恢复**
+   - 任务可从任意点恢复
+   - 中断的工具执行被优雅处理
+   - 文件变更可从检查点恢复
+   - 上下文跨 VSCode 会话保留
 
-3. **Workspace Synchronization**
-   - File changes are tracked through Git
-   - Checkpoints are created after tool executions
-   - State can be restored to any checkpoint
-   - Changes can be compared between checkpoints
+3. **工作区同步**
+   - 文件变更通过 Git 跟踪
+   - 工具执行后创建检查点
+   - 状态可恢复到任意检查点
+   - 检查点间可对比变更
 
-4. **Error Recovery**
-   - Failed API requests can be retried
-   - Interrupted tool executions are marked
-   - Resources are cleaned up properly
-   - User is notified of state changes
+4. **错误恢复**
+   - 失败的 API 请求可重试
+   - 中断的工具执行被标记
+   - 资源被妥善清理
+   - 用户被通知状态变化
 
-## Plan/Act Mode System
+## 计划/执行模式系统
 
-Cline implements a dual-mode system that separates planning from execution:
+Cline 实现了计划与执行分离的双模式系统：
 
-### Mode Architecture
+### 模式架构
 
-The Plan/Act mode system consists of:
+计划/执行模式系统包括：
 
-1. **Mode State**: Stored in `chatSettings.mode` in the Controller's state
-2. **Mode Switching**: Handled by `togglePlanActModeWithChatSettings` in the Controller
-3. **Mode-specific Models**: Optional configuration to use different models for each mode
-4. **Mode-specific Prompting**: Different system prompts for planning vs. execution
+1. **模式状态**：存储于 Controller 状态的 chatSettings.mode
+2. **模式切换**：由 Controller 的 togglePlanActModeWithChatSettings 处理
+3. **模式专属模型**：可为每种模式配置不同模型
+4. **模式专属提示词**：计划与执行使用不同系统提示词
 
-### Mode Switching Process
+### 模式切换流程
 
-When switching between modes:
+切换模式时：
 
-1. The current model configuration is saved to mode-specific state
-2. The previous mode's model configuration is restored
-3. The Task instance is updated with the new mode
-4. The webview is notified of the mode change
-5. Telemetry events are captured for analytics
+1. 当前模型配置保存到模式专属状态
+2. 恢复前一模式的模型配置
+3. Task 实例更新为新模式
+4. webview 被通知模式变化
+5. 采集遥测事件用于分析
 
-### Plan Mode
+### 计划模式
 
-Plan mode is designed for:
-- Information gathering and context building
-- Asking clarifying questions
-- Creating detailed execution plans
-- Discussing approaches with the user
+计划模式用于：
+- 信息收集与上下文构建
+- 提问澄清
+- 制定详细执行计划
+- 与用户讨论方案
 
-In Plan mode, the AI uses the `plan_mode_respond` tool to engage in conversational planning without executing actions.
+在计划模式下，AI 仅使用 plan_mode_respond 工具进行对话规划，不执行实际操作。
 
-### Act Mode
+### 执行模式
 
-Act mode is designed for:
-- Executing the planned actions
-- Using tools to modify files, run commands, etc.
-- Implementing the solution
-- Providing results and completion feedback
+执行模式用于：
+- 执行已规划的操作
+- 使用工具修改文件、运行命令等
+- 实现解决方案
+- 提供结果与完成反馈
 
-In Act mode, the AI has access to all tools except `plan_mode_respond` and focuses on implementation rather than discussion.
+在执行模式下，AI 可用除 plan_mode_respond 外的所有工具，专注于实现而非讨论。
 
-## Data Flow & State Management
+## 数据流与状态管理
 
-### Core Extension Role
+### 核心扩展角色
 
-The Controller acts as the single source of truth for all persistent state. It:
-- Manages VSCode global state and secrets storage
-- Coordinates state updates between components
-- Ensures state consistency across webview reloads
-- Handles task-specific state persistence
-- Manages checkpoint creation and restoration
+Controller 作为所有持久化状态的唯一数据源：
+- 管理 VSCode 全局状态和密钥存储
+- 协调组件间状态更新
+- 保证 webview 重载时状态一致
+- 处理任务专属状态持久化
+- 管理检查点创建与恢复
 
-### Terminal Management
+### 终端管理
 
-The Task class manages terminal instances and command execution:
+Task 类管理终端实例与命令执行：
 
 ```typescript
 class Task {
   async executeCommandTool(command: string): Promise<[boolean, ToolResponse]> {
-    // 1. Get or create terminal
+    // 1. 获取或创建终端
     const terminalInfo = await this.terminalManager.getOrCreateTerminal(cwd)
     terminalInfo.terminal.show()
 
-    // 2. Execute command with output streaming
+    // 2. 流式输出执行命令
     const process = this.terminalManager.runCommand(terminalInfo, command)
     
-    // 3. Handle real-time output
+    // 3. 实时输出处理
     let result = ""
     process.on("line", (line) => {
       result += line + "\n"
@@ -584,7 +580,7 @@ class Task {
       }
     })
 
-    // 4. Wait for completion or user feedback
+    // 4. 等待完成或用户反馈
     let completed = false
     process.once("completed", () => {
       completed = true
@@ -592,125 +588,125 @@ class Task {
 
     await process
 
-    // 5. Return result
+    // 5. 返回结果
     if (completed) {
-      return [false, `Command executed.\n${result}`]
+      return [false, `命令已执行。\n${result}`]
     } else {
       return [
         false,
-        `Command is still running in the user's terminal.\n${result}\n\nYou will be updated on the terminal status and new output in the future.`
+        `命令仍在用户终端运行。\n${result}\n\n你将在未来收到终端状态和新输出的更新。`
       ]
     }
   }
 }
 ```
 
-Key features:
-1. **Terminal Instance Management**
-   - Multiple terminal support
-   - Terminal state tracking (busy/inactive)
-   - Process cooldown monitoring
-   - Output history per terminal
+主要特性：
+1. **终端实例管理**
+   - 多终端支持
+   - 终端状态跟踪（忙/空闲）
+   - 进程冷却监控
+   - 每终端输出历史
 
-2. **Command Execution**
-   - Real-time output streaming
-   - User feedback handling
-   - Process state monitoring
-   - Error recovery
+2. **命令执行**
+   - 实时输出流
+   - 用户反馈处理
+   - 进程状态监控
+   - 错误恢复
 
-### Browser Session Management
+### 浏览器会话管理
 
-The Task class handles browser automation through Puppeteer:
+Task 类通过 Puppeteer 管理浏览器自动化：
 
 ```typescript
 class Task {
   async executeBrowserAction(action: BrowserAction): Promise<BrowserActionResult> {
     switch (action) {
       case "launch":
-        // 1. Launch browser with fixed resolution
+        // 1. 固定分辨率启动浏览器
         await this.browserSession.launchBrowser()
         return await this.browserSession.navigateToUrl(url)
 
       case "click":
-        // 2. Handle click actions with coordinates
+        // 2. 坐标点击
         return await this.browserSession.click(coordinate)
 
       case "type":
-        // 3. Handle keyboard input
+        // 3. 键盘输入
         return await this.browserSession.type(text)
 
       case "close":
-        // 4. Clean up resources
+        // 4. 资源清理
         return await this.browserSession.closeBrowser()
     }
   }
 }
 ```
 
-Key aspects:
-1. **Browser Control**
-   - Fixed 900x600 resolution window
-   - Single instance per task lifecycle
-   - Automatic cleanup on task completion
-   - Console log capture
+主要特性：
+1. **浏览器控制**
+   - 固定 900x600 分辨率窗口
+   - 每任务生命周期单实例
+   - 任务完成自动清理
+   - 控制台日志捕获
 
-2. **Interaction Handling**
-   - Coordinate-based clicking
-   - Keyboard input simulation
-   - Screenshot capture
-   - Error recovery
+2. **交互处理**
+   - 基于坐标的点击
+   - 键盘输入模拟
+   - 截图
+   - 错误恢复
 
-## MCP (Model Context Protocol) Integration
+## MCP（模型上下文协议）集成
 
-### MCP Architecture
+### MCP 架构
 
-The MCP system consists of:
+MCP 系统包括：
 
-1. **McpHub Class**: Central manager in `src/services/mcp/McpHub.ts`
-2. **MCP Connections**: Manages connections to external MCP servers
-3. **MCP Settings**: Configuration stored in a JSON file
-4. **MCP Marketplace**: Online catalog of available MCP servers
-5. **MCP Tools & Resources**: Capabilities exposed by connected servers
+1. **McpHub 类**：src/services/mcp/McpHub.ts 中的中央管理器
+2. **MCP 连接**：管理外部 MCP 服务器连接
+3. **MCP 设置**：JSON 文件中的配置
+4. **MCP 市场**：在线 MCP 服务器目录
+5. **MCP 工具与资源**：已连接服务器暴露的能力
 
-The McpHub class:
-- Manages the lifecycle of MCP server connections
-- Handles server configuration through a settings file
-- Provides methods for calling tools and accessing resources
-- Implements auto-approval settings for MCP tools
-- Monitors server health and handles reconnection
+McpHub 类：
+- 管理 MCP 服务器连接生命周期
+- 通过设置文件管理服务器配置
+- 提供调用工具和访问资源的方法
+- 实现 MCP 工具的自动批准设置
+- 监控服务器健康并处理重连
 
-### MCP Server Types
+### MCP 服务器类型
 
-Cline supports two types of MCP server connections:
-- **Stdio**: Command-line based servers that communicate via standard I/O
-- **SSE**: HTTP-based servers that communicate via Server-Sent Events
+Cline 支持两类 MCP 服务器连接：
+- **Stdio**：基于命令行的标准输入输出通信服务器
+- **SSE**：基于 HTTP 的 Server-Sent Events 通信服务器
 
-### MCP Server Management
+### MCP 服务器管理
 
-The McpHub class provides methods for:
-- Discovering and connecting to MCP servers
-- Monitoring server health and status
-- Restarting servers when needed
-- Managing server configurations
-- Setting timeouts and auto-approval rules
+McpHub 类提供：
+- 发现与连接 MCP 服务器
+- 监控服务器健康与状态
+- 需要时重启服务器
+- 管理服务器配置
+- 设置超时与自动批准规则
 
-### MCP Tool Integration
+### MCP 工具集成
 
-MCP tools are integrated into the Task execution system:
-- Tools are discovered and registered at connection time
-- The Task class can call MCP tools through the McpHub
-- Tool results are streamed back to the AI
-- Auto-approval settings can be configured per tool
+MCP 工具集成到 Task 执行系统：
+- 工具在连接时被发现和注册
+- Task 类可通过 McpHub 调用 MCP 工具
+- 工具结果流式返回给 AI
+- 可为每个工具配置自动批准
 
-### MCP Marketplace
+### MCP 市场
 
-The MCP Marketplace provides:
-- A catalog of available MCP servers
-- One-click installation
-- README previews
-- Server status monitoring
+MCP 市场提供：
+- 可用 MCP 服务器目录
+- 一键安装
+- README 预览
+- 服务器状态监控
 
-The Controller class manages MCP servers through the McpHub service:
+Controller 类通过 McpHub 服务管理 MCP 服务器：
 
 ```typescript
 class Controller {
@@ -721,7 +717,7 @@ class Controller {
   }
 
   async downloadMcp(mcpId: string) {
-    // Fetch server details from marketplace
+    // 从市场获取服务器详情
     const response = await axios.post<McpDownloadResponse>(
       "https://api.cline.bot/v1/mcp/download",
       { mcpId },
@@ -731,34 +727,33 @@ class Controller {
       }
     )
 
-    // Create task with context from README
-    const task = `Set up the MCP server from ${mcpDetails.githubUrl}...`
+    // 用 README 上下文创建任务
+    const task = `设置 MCP 服务器：${mcpDetails.githubUrl}...`
 
-    // Initialize task and show chat view
+    // 初始化任务并显示聊天视图
     await this.initClineWithTask(task)
   }
 }
 ```
 
-## Conclusion
+## 结论
 
-This guide provides a comprehensive overview of the Cline extension architecture, with special focus on state management, data persistence, and code organization. Following these patterns ensures robust feature implementation with proper state handling across the extension's components.
+本指南全面介绍了 Cline 扩展的架构，重点讲解了状态管理、数据持久化和代码组织。遵循这些模式可确保各功能实现具备健壮的状态处理能力。
 
-Remember:
-- Always persist important state in the extension
-- The core extension follows a WebviewProvider -> Controller -> Task flow
-- Use proper typing for all state and messages
-- Handle errors and edge cases
-- Test state persistence across webview reloads
-- Follow the established patterns for consistency
-- Place new code in appropriate directories
-- Maintain clear separation of concerns
-- Install dependencies in correct package.json
+请记住：
+- 重要状态务必持久化
+- 核心扩展遵循 WebviewProvider -> Controller -> Task 流程
+- 所有状态和消息均应类型安全
+- 处理好错误和边界情况
+- 测试 webview 重载下的状态持久化
+- 新功能遵循既有模式
+- 新代码放在合适目录
+- 依赖安装到正确的 package.json
 
-## Contributing
+## 贡献指南
 
-Contributions to the Cline extension are welcome! Please follow these guidelines:
+欢迎为 Cline 扩展贡献代码！请遵循以下准则：
 
-When adding new tools or API providers, follow the existing patterns in the `src/integrations/` and `src/api/providers/` directories, respectively. Ensure that your code is well-documented and includes appropriate error handling.
+添加新工具或 API 提供方时，请遵循 src/integrations/ 和 src/api/providers/ 目录下的既有模式。确保代码有良好注释并包含适当的错误处理。
 
-The `.clineignore` file allows users to specify files and directories that Cline should not access. When implementing new features, respect the `.clineignore` rules and ensure that your code does not attempt to read or modify ignored files.
+.clineignore 文件允许用户指定 Cline 不应访问的文件和目录。实现新功能时请遵守 .clineignore 规则，确保代码不会读取或修改被忽略的文件。
